@@ -207,7 +207,16 @@ function renderSelected() {
   const kind = document.createElement("p");
   kind.className = "muted";
   const opts = p.neuron.options ? Object.entries(p.neuron.options).map(([k, v]) => `${k} ${v}`).join(", ") : "";
-  kind.textContent = [p.neuron.kind, opts, p.cycle ? "its file loops back on itself" : ""].filter(Boolean).join(" · ");
+  const waiting = scene.waiting(p.key);
+  kind.textContent = [
+    p.neuron.kind,
+    opts,
+    p.neuron.effect ? "effect: never cut, a crash is unknown" : "",
+    waiting ? `waiting on a person (${waiting})` : "",
+    p.cycle ? "its file loops back on itself" : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const parts: Node[] = [h, desc, kind];
   if (p.level > 0) {
     const sealed = document.createElement("p");
@@ -254,6 +263,9 @@ function describeEvent(ev: TraceEvent): string {
 }
 
 function logEvent(ev: TraceEvent) {
+  // A quiet reply says nothing: it is counted on its neuron, not logged (a
+  // colony's ticks would bury every other line).
+  if (ev.type === "quiet") return;
   const li = document.createElement("li");
   const t = document.createElement("span");
   t.className = "t";
@@ -334,9 +346,83 @@ function loop(now: number) {
   requestAnimationFrame(loop);
 }
 
+// -- Attach: follow the runs a demo harness announces --------------------------
+
+interface AttachedRun {
+  manifest: { demo: string; title?: string; started: number; ended: boolean; people?: { id: string; name: string; roles: string[]; url: string }[] };
+  describe: { body: DescribeBody; isError: boolean };
+}
+
+function attach() {
+  document.body.classList.add("attached");
+  for (const el of [networkSel, inputsSel, runBtn]) (el.closest("label") ?? el).setAttribute("hidden", "");
+  status("Watching for a demo run (npm run demo <name> in agent-neuron-demos)…");
+  let events: TraceEvent[] = [];
+  let people: AttachedRun["manifest"]["people"] = [];
+  const src = new EventSource("/api/attach");
+  src.addEventListener("run", (m) => {
+    const r = JSON.parse((m as MessageEvent).data) as AttachedRun;
+    const body = r.describe.body;
+    if (r.describe.isError || !body.ok) {
+      const b = body as Extract<DescribeBody, { ok: false }>;
+      current = null;
+      scene.clear();
+      renderAbout(null, b.errors ?? [], b.warnings ?? [], b.error);
+      status(`${r.manifest.demo}: the network does not check`, true);
+      return;
+    }
+    current = body.network;
+    people = r.manifest.people ?? [];
+    scene.show(layout(body.network));
+    renderAbout(body.network, [], body.warnings);
+    renderPeople(people);
+    events = [];
+    // The run's t = 0 on this page's clock, from the harness's wall clock.
+    player.startLive(performance.now() - (Date.now() - r.manifest.started));
+    speedSel.value = "1";
+    status(`${r.manifest.title ?? r.manifest.demo}: running`);
+  });
+  src.addEventListener("events", (m) => {
+    const { events: more } = JSON.parse((m as MessageEvent).data) as { events: TraceEvent[] };
+    events = events.concat(more);
+    player.update(events);
+    player.catchUp(performance.now());
+    status(`${current?.name ?? "run"}: ${events.length} events${people?.length ? " · the desk is open" : ""}`);
+  });
+  src.addEventListener("done", (m) => {
+    const d = JSON.parse((m as MessageEvent).data) as { code?: number; trace_events?: TraceEvent[] };
+    const all = d.trace_events ?? events;
+    player.update(all, true);
+    player.endLive();
+    player.playing = player.time < player.duration;
+    status(`${current?.name ?? "run"}: done, ${all.length} events${d.code ? ` (exit ${d.code})` : ""}. Waiting for the next run…`, !!d.code);
+  });
+  src.addEventListener("problem", (m) => status(JSON.parse((m as MessageEvent).data).message, true));
+}
+
+function renderPeople(people: AttachedRun["manifest"]["people"]) {
+  if (!people?.length) return;
+  const h = document.createElement("h2");
+  h.textContent = "The desk";
+  const ul = document.createElement("ul");
+  ul.className = "people";
+  for (const p of people) {
+    const li = document.createElement("li");
+    const a = document.createElement("a");
+    a.href = p.url;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.textContent = p.name;
+    li.append(a, ` ${p.roles.join(", ")}`);
+    ul.append(li);
+  }
+  about.append(h, ul);
+}
+
 // Dev only: a handle for browser checks.
 if (import.meta.env.DEV) Object.assign(window, { __viz: { scene, player } });
 
 renderLegend();
 requestAnimationFrame(loop);
-loadLists().catch((e) => status(`The bridge is not answering: ${(e as Error).message}`, true));
+if (new URLSearchParams(location.search).has("attach")) attach();
+else loadLists().catch((e) => status(`The bridge is not answering: ${(e as Error).message}`, true));

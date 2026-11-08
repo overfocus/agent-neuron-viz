@@ -45,6 +45,7 @@ interface NodeView {
   flashColor: THREE.Color;
   flashAt: number;
   stats: NeuronStats;
+  label: HTMLElement;
 }
 
 interface LinkView {
@@ -243,7 +244,8 @@ export class NetworkScene {
     }
     const el = document.createElement("div");
     el.className = `label${inner ? " inner" : ""}${composed ? " composed" : ""}`;
-    el.textContent = p.cycle ? `${p.id} ↻` : p.id;
+    el.textContent = p.cycle ? `${p.id} ↻` : p.neuron.effect ? `${p.id} ⚑` : p.id;
+    if (p.neuron.effect) el.title = "effect: never cut; a crash is unknown";
     const label = new CSS2DObject(el);
     label.position.set(0, p.radius + (composed ? 0.3 : 0.45), 0);
     mesh.add(label);
@@ -256,7 +258,20 @@ export class NetworkScene {
       flashColor: new THREE.Color(),
       flashAt: -Infinity,
       stats: emptyStats(),
+      label: el,
     });
+  }
+
+  /**
+   * Calls a human neuron has been given and not yet answered: what the
+   * desk is waiting on a person for (inputs minus answers, quiets, drops
+   * and errors at it).
+   */
+  waiting(key: string): number {
+    const n = this.nodes.get(key);
+    if (!n || n.placed.neuron.kind !== "human") return 0;
+    const s = n.stats;
+    return Math.max(0, s.received - s.answers - s.quiet - s.drops - s.errors);
   }
 
   private addLink(fromKey: string, toKey: string): void {
@@ -319,6 +334,16 @@ export class NetworkScene {
       n.mat.emissive.copy(n.base).lerp(n.flashColor, k);
       n.mat.emissiveIntensity = 0.08 + activity + k * 1.4;
       if (n.placed.neuron.kind !== "composed") n.mesh.scale.setScalar(1 + k * 0.25);
+      if (n.placed.neuron.kind === "human") {
+        // A person owes an answer: the neuron breathes until it comes.
+        const w = this.waiting(n.placed.key);
+        const breathe = w && !this.reducedMotion.matches ? 0.5 + 0.5 * Math.sin(now / 260) : w ? 1 : 0;
+        n.mat.emissiveIntensity += breathe * 0.9;
+        if (w) n.mesh.scale.setScalar(1 + k * 0.25 + breathe * 0.12);
+        const text = w ? `${n.placed.id} · waiting ${w}` : n.placed.id;
+        if (n.label.textContent !== text) n.label.textContent = text;
+        n.label.classList.toggle("waiting", !!w);
+      }
     }
     for (const l of this.links.values()) {
       l.mat.opacity = 0.3 + Math.min(0.6, Math.log2(1 + l.count) * 0.12);

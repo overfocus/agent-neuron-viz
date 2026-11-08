@@ -7,6 +7,8 @@ export interface NeuronDesc {
   description: string;
   options?: { threshold?: number; within?: number; maxHops?: number };
   cost?: Record<string, number>;
+  /** Declared `effect` (SPEC 11): a started call is never cut, a crash is `unknown`. */
+  effect?: boolean;
   /** A composed neuron's inner network, or a loop mark. */
   network?: NetworkDesc | { file: string; cycle: true };
 }
