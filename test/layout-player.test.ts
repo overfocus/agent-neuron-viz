@@ -120,3 +120,33 @@ describe("player", () => {
     expect(fired).toEqual(["a", "late", "z"]);
   });
 });
+
+describe("layout with `at` (decision 0011)", () => {
+  const map: NetworkDesc = {
+    file: "map.network.json",
+    name: "map",
+    description: "a made-up map",
+    neurons: [
+      { id: "nest", kind: "serve", description: "nest", at: [0, 0, 0] },
+      { id: "near", kind: "serve", description: "near", at: [100, 0, 0] },
+      { id: "far", kind: "serve", description: "far", at: [0, -300, 0] },
+      { id: "free", kind: "run", description: "no at: the forces place it" },
+    ],
+    links: [
+      { from: "nest", to: "near" },
+      { from: "nest", to: "far" },
+      { from: "near", to: "free" },
+    ],
+  };
+
+  it("pins placed neurons at the file's coordinates, scaled, around the file's own origin", () => {
+    const l = layout(map);
+    const pos = (id: string) => l.neurons.find((n) => n.id === id)!.pos;
+    expect(pos("nest")).toEqual([0, 0, 0]);
+    const s = -pos("far")[1] / 300;
+    expect(s).toBeGreaterThan(0);
+    expect(pos("near")[0]).toBeCloseTo(100 * s);
+    expect(pos("near")[1]).toBeCloseTo(0);
+    expect(pos("free").every(Number.isFinite)).toBe(true);
+  });
+});

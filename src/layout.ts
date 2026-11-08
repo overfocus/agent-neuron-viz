@@ -48,6 +48,9 @@ interface Node extends SimNode {
   radius: number;
 }
 
+/** How far the largest `at` coordinate of a network reaches from its origin, in scene units. */
+const AT_REACH = STEP * 2.6;
+
 /** Breadth-first distance from the starting neurons; unreachable ones take depth 0. */
 export function depths(net: NetworkDesc): Map<string, number> {
   const starts = net.entry ? [net.entry] : net.neurons.filter((n) => n.kind === "source").map((n) => n.id);
@@ -81,10 +84,20 @@ function place(net: NetworkDesc, prefix: string, level: number, parent?: string)
     if (isNetwork(n.network)) inner.set(n.id, place(n.network, `${prefix}${n.id}/`, level + 1, `${prefix}${n.id}`));
   }
   const maxDepth = Math.max(0, ...depth.values());
+  // Neurons the file places (`at`, decision 0011) are pinned there, scaled so
+  // the farthest sits AT_REACH from the origin; the forces place the rest.
+  const placed = net.neurons.filter((n) => n.at);
+  const reach = Math.max(1e-9, ...placed.flatMap((n) => n.at!.map(Math.abs)));
+  const scale = AT_REACH / reach;
   const nodes: Node[] = net.neurons.map((n) => {
     const sub = inner.get(n.id);
     const radius = sub ? sub.extent * INNER_SCALE + 1.4 : n.kind === "composed" ? 1.6 : NEURON_RADIUS;
-    return { id: n.id, depth: depth.get(n.id)!, radius };
+    const node: Node = { id: n.id, depth: depth.get(n.id)!, radius };
+    if (n.at) {
+      [node.fx, node.fy, node.fz] = n.at.map((v) => v * scale);
+      [node.x, node.y, node.z] = [node.fx, node.fy, node.fz];
+    }
+    return node;
   });
   // d3 swaps each link's ids for the node objects before it asks the distance.
   type SimLink = { source: string | Node; target: string | Node };
@@ -102,7 +115,7 @@ function place(net: NetworkDesc, prefix: string, level: number, parent?: string)
     )
     .force("charge", forceManyBody<Node>().strength(-25))
     .force("collide", forceCollide<Node>((n) => n.radius + 1.2).strength(1))
-    .force("x", forceX<Node>((n) => (n.depth - maxDepth / 2) * STEP).strength(0.9))
+    .force("x", forceX<Node>((n) => (n.depth - maxDepth / 2) * STEP).strength(placed.length ? 0.05 : 0.9))
     .force("y", forceY<Node>(0).strength(0.05))
     .force("z", forceZ<Node>(0).strength(0.05))
     .stop()
@@ -111,9 +124,10 @@ function place(net: NetworkDesc, prefix: string, level: number, parent?: string)
   const neurons: PlacedNeuron[] = [];
   const placedLinks: PlacedLink[] = net.links.map((l) => ({ from: prefix + l.from, to: prefix + l.to, parent }));
   // Centre the layer layout on the origin so a shell's inside sits inside it.
-  const cx = avg(nodes.map((n) => n.x ?? 0));
-  const cy = avg(nodes.map((n) => n.y ?? 0));
-  const cz = avg(nodes.map((n) => n.z ?? 0));
+  // A file that places its neurons keeps its own origin.
+  const cx = placed.length ? 0 : avg(nodes.map((n) => n.x ?? 0));
+  const cy = placed.length ? 0 : avg(nodes.map((n) => n.y ?? 0));
+  const cz = placed.length ? 0 : avg(nodes.map((n) => n.z ?? 0));
   let extent = 0;
   net.neurons.forEach((n, i) => {
     const s = nodes[i];

@@ -6,6 +6,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { CSS2DObject, CSS2DRenderer } from "three/addons/renderers/CSS2DRenderer.js";
 import type { Layout, PlacedNeuron } from "./layout.ts";
 import type { TraceEvent } from "./types.ts";
+import { stride, type Trip } from "./walk.ts";
 
 // Kind colours, the family's (rigswig's page uses the same hues): bright on black,
 // and never the only cue — the legend names every colour, and this map is the one
@@ -31,6 +32,8 @@ export const EVENT_COLORS: Record<string, string> = {
 const PULSE_MS = 520;
 const FLASH_MS = 700;
 const MAX_PULSES = 400;
+/** A walker's drawn size against an ordinary neuron's: many small things moving. */
+const WALKER_SIZE = 0.32;
 
 export interface NeuronStats {
   sent: number;
@@ -50,6 +53,8 @@ interface NodeView {
   flashAt: number;
   stats: NeuronStats;
   label: HTMLElement;
+  /** Drawn size against the layout's radius: walkers are small. */
+  size: number;
 }
 
 interface LinkView {
@@ -85,6 +90,8 @@ export class NetworkScene {
   private failAt = -Infinity;
   private raycaster = new THREE.Raycaster();
   private reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+  private walkers = new Set<string>();
+  private tripsByWalker = new Map<string, Trip[]>();
   speed = 1;
 
   constructor(
@@ -140,6 +147,8 @@ export class NetworkScene {
     }
     this.nodes.clear();
     this.links.clear();
+    this.walkers.clear();
+    this.tripsByWalker.clear();
     this.pulses = [];
     this.select(null);
   }
@@ -166,6 +175,7 @@ export class NetworkScene {
 
   select(key: string | null): void {
     this.selected = key && this.nodes.has(key) ? key : null;
+    for (const [k, v] of this.nodes) v.label.classList.toggle("chosen", k === this.selected);
     const n = this.selected ? this.nodes.get(this.selected) : undefined;
     this.selection.visible = !!n;
     if (n) {
@@ -192,7 +202,8 @@ export class NetworkScene {
           if (target) target.stats.received++;
           const link = this.links.get(`${ev.from}->${to}`);
           if (link) link.count++;
-          if (!instant && from && target) this.pulse(from, target, color, false);
+          // A walker's trip is its signal: no pulses to or from a neuron that walks.
+          if (!instant && from && target && !this.walkers.has(ev.from!) && !this.walkers.has(to)) this.pulse(from, target, color, false);
         }
         if (!instant && from) this.flash(from, color, now);
         break;
@@ -204,7 +215,7 @@ export class NetworkScene {
           if (ev.type === "answer") {
             for (const to of ev.to ?? []) {
               const target = this.nodes.get(to);
-              if (target) this.pulse(from, target, color, true);
+              if (target && !this.walkers.has(to) && !this.walkers.has(ev.from!)) this.pulse(from, target, color, true);
             }
           }
         }
@@ -263,7 +274,48 @@ export class NetworkScene {
       flashAt: -Infinity,
       stats: emptyStats(),
       label: el,
+      size: 1,
     });
+  }
+
+  /**
+   * The neurons a demo asks to see walking (the colony's ants): their labels
+   * hide until selected, and walk() moves them along their trips.
+   */
+  setWalkers(ids: Iterable<string>): void {
+    this.walkers = new Set([...ids].filter((id) => this.nodes.has(id)));
+    for (const [key, n] of this.nodes) {
+      n.label.classList.toggle("walker", this.walkers.has(key));
+      n.size = this.walkers.has(key) ? WALKER_SIZE : 1;
+    }
+  }
+
+  get walking(): ReadonlySet<string> {
+    return this.walkers;
+  }
+
+  setTrips(trips: Map<string, Trip[]>): void {
+    this.tripsByWalker = trips;
+  }
+
+  /** Put every walker where it is at `t` (ms on the run's clock). */
+  walk(t: number): void {
+    for (const id of this.walkers) {
+      const n = this.nodes.get(id);
+      if (!n) continue;
+      const home = new THREE.Vector3(...n.placed.pos);
+      const s = this.reducedMotion.matches ? null : stride(this.tripsByWalker.get(id), t);
+      const target = s ? this.nodes.get(s.trip.target) : undefined;
+      if (s && target) {
+        // Stop at the target's surface, not inside it.
+        const to = target.mesh.position.clone();
+        to.addScaledVector(home.clone().sub(to).normalize(), target.placed.radius + n.placed.radius * n.size);
+        n.mesh.position.lerpVectors(home, to, s.k);
+      } else {
+        n.mesh.position.copy(home);
+      }
+      if (this.selected === id) this.selection.position.copy(n.mesh.position);
+    }
   }
 
   /**
@@ -337,7 +389,7 @@ export class NetworkScene {
       const activity = Math.min(0.35, Math.log2(1 + n.stats.received + n.stats.answers) * 0.04);
       n.mat.emissive.copy(n.base).lerp(n.flashColor, k);
       n.mat.emissiveIntensity = 0.08 + activity + k * 1.4;
-      if (n.placed.neuron.kind !== "composed") n.mesh.scale.setScalar(1 + k * 0.25);
+      if (n.placed.neuron.kind !== "composed") n.mesh.scale.setScalar(n.size * (1 + k * 0.25));
       if (n.placed.neuron.kind === "human") {
         // A person owes an answer: the neuron breathes until it comes.
         const w = this.waiting(n.placed.key);
