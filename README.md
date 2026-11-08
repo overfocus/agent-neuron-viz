@@ -36,6 +36,7 @@ npm run dev            # http://localhost:5180
 
 `AGENT_NEURON_ROOT` (default `../agent-neuron`) sets the checkout whose
 `spec/examples` are listed and which is the engine's working directory;
+`AGENT_NEURON_DEMOS` (default `../agent-neuron-demos`) is the checkout attach follows;
 `NEURON_ENGINE` overrides the binary. `PORT` sets the dev port.
 
 ## What you see
@@ -60,7 +61,25 @@ npm run dev            # http://localhost:5180
 
 Networks with `human` neurons are refused by the engine's run tools (the desk
 is the person's surface, not an MCP surface). They can still be described and
-drawn.
+drawn, and watched live through attach (below).
+
+## Attach: watch the demos
+
+[agent-neuron-demos](https://github.com/overfocus/agent-neuron-demos) runs its
+demos on the engine's command line (people answer on the engine's desk, which
+MCP never carries) and announces each run in `runs/current.json`. Open
+`http://localhost:5180/?attach` and run any demo there: the page follows each
+run as it starts.
+
+| Page asks for | Bridge does |
+|---|---|
+| `GET /api/attach` (SSE) | reads the manifest; for each new run `describe_network` (MCP) on its network file, then the run's `--stream` file as it grows (SPEC 9.1: the stream is the trace), then `read_trace` (MCP) at the end |
+
+Files the manifest names must sit inside the demos checkout
+(`AGENT_NEURON_DEMOS`, default `../agent-neuron-demos`). In attach mode a human
+neuron breathes and its label says `waiting N` while the desk waits on a
+person, an effect neuron carries a ⚑, and the desk's people are linked in the
+panel.
 
 ## Check
 
