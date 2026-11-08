@@ -44,7 +44,7 @@ export type DescribeBody =
 
 export interface TraceEvent {
   t: number;
-  type: "signal" | "answer" | "quiet" | "drop" | "error" | "unknown" | "fail" | "finished" | "note" | string;
+  type: "signal" | "answer" | "quiet" | "ground" | "drop" | "error" | "unknown" | "fail" | "finished" | "note" | string;
   id?: string;
   from?: string;
   to?: string[];
@@ -54,6 +54,9 @@ export interface TraceEvent {
   message?: string;
   code?: string;
   what?: string;
+  /** A `ground` event's write (SPEC 4.5): the place laid on and the stored value after it. */
+  place?: string;
+  v?: number;
   status?: string;
   hops?: number;
   replyTo?: string;

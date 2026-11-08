@@ -29,6 +29,10 @@ export const EVENT_COLORS: Record<string, string> = {
   unknown: "#ff7a7a",
   fail: "#ff7a7a",
 };
+const TRAIL_GLOW = "#39ff00"; // a trail glows toward the family accent as its ground strengthens
+const TRAIL_DARK = "#1c242c"; // a place marked dead (or evaporated away) takes its link dark
+/** The aged ground at which a trail glow is full. */
+const TRAIL_FULL = 6;
 const PULSE_MS = 520;
 const FLASH_MS = 700;
 const MAX_PULSES = 400;
@@ -62,6 +66,8 @@ interface LinkView {
   mat: THREE.LineBasicMaterial;
   cone: THREE.Mesh;
   count: number;
+  /** The place the link points at: a trail's glow is its ground there. */
+  to: string;
 }
 
 interface Pulse {
@@ -92,6 +98,14 @@ export class NetworkScene {
   private reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
   private walkers = new Set<string>();
   private tripsByWalker = new Map<string, Trip[]>();
+  /** The engine's ground, as the run's `ground` events say: the latest { v, at } per place (SPEC 4.5). */
+  private ground = new Map<string, { v: number; at: number }>();
+  /** What each food last said it had, carried to a node's label by the nest's stock broadcasts. */
+  private stock = new Map<string, number>();
+  /** The network file's evaporate, announced by the run's manifest; 0 keeps the last write's value. */
+  private evaporate = 0;
+  /** The playhead on the run's clock, ms: the ground ages against it. */
+  private playhead = 0;
   speed = 1;
 
   constructor(
@@ -149,6 +163,8 @@ export class NetworkScene {
     this.links.clear();
     this.walkers.clear();
     this.tripsByWalker.clear();
+    this.ground.clear();
+    this.stock.clear();
     this.pulses = [];
     this.select(null);
   }
@@ -158,11 +174,24 @@ export class NetworkScene {
     for (const n of this.nodes.values()) {
       n.stats = emptyStats();
       n.flashAt = -Infinity;
+      this.setLabel(n, n.placed.id);
     }
     for (const l of this.links.values()) l.count = 0;
     for (const p of this.pulses) this.graph.remove(p.mesh);
     this.pulses = [];
     this.failAt = -Infinity;
+    this.ground.clear();
+    this.stock.clear();
+  }
+
+  /** The trail's evaporation rate: the run's manifest announces the network file's. */
+  setEvaporate(r: number): void {
+    this.evaporate = r;
+  }
+
+  /** The playhead on the run's clock: the scene's ground ages against it. */
+  aging(t: number): void {
+    this.playhead = t;
   }
 
   stats(key: string): NeuronStats | undefined {
@@ -192,11 +221,17 @@ export class NetworkScene {
       if (!instant) this.failAt = now;
       return;
     }
+    if (ev.type === "ground") {
+      // The engine's bookkeeping laid a place: the trail's state, keyed by place.
+      if (typeof ev.place === "string" && typeof ev.v === "number") this.ground.set(ev.place, { v: ev.v, at: ev.t });
+      return;
+    }
     const from = ev.from ? this.nodes.get(ev.from) : undefined;
     const at = ev.neuron ? this.nodes.get(ev.neuron) : undefined;
     switch (ev.type) {
-      case "signal":
+      case "signal": {
         if (from) from.stats.sent++;
+        this.readStock(ev);
         for (const to of ev.to ?? []) {
           const target = this.nodes.get(to);
           if (target) target.stats.received++;
@@ -207,6 +242,7 @@ export class NetworkScene {
         }
         if (!instant && from) this.flash(from, color, now);
         break;
+      }
       case "answer":
       case "quiet":
         if (from) from.stats[ev.type === "answer" ? "answers" : "quiet"]++;
@@ -230,6 +266,30 @@ export class NetworkScene {
         if (!instant && at) this.flash(at, color, now);
         break;
     }
+  }
+
+  /**
+   * A signal whose payload names a food and says what was left there — the
+   * colony's stock broadcast (the nest drumming every delivery to every ant)
+   * — sets the food node's stock label. The latest broadcast wins, so a
+   * patch's ring runs down to 0 and stays there.
+   */
+  private readStock(ev: TraceEvent): void {
+    const data = ev.payload?.type === "json" ? ev.payload.data : undefined;
+    if (!data || typeof data !== "object") return;
+    const food = (data as Record<string, unknown>).food;
+    const left = (data as Record<string, unknown>).left;
+    if (typeof food !== "string" || typeof left !== "number" || !Number.isFinite(left)) return;
+    const n = this.nodes.get(food);
+    if (!n) return;
+    this.stock.set(food, left);
+    this.setLabel(n, `${n.placed.id} · ${Math.round(left)}`);
+  }
+
+  /** A non-human neuron's label text (humans' labels breathe; this doesn't fight them). */
+  private setLabel(n: NodeView, text: string): void {
+    if (n.placed.neuron.kind === "human") return;
+    if (n.label.textContent !== text) n.label.textContent = text;
   }
 
   private addNeuron(p: PlacedNeuron): void {
@@ -345,7 +405,7 @@ export class NetworkScene {
     cone.position.copy(q).addScaledVector(dir, -0.25);
     cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
     this.graph.add(line, cone);
-    this.links.set(`${fromKey}->${toKey}`, { line, mat, cone, count: 0 });
+    this.links.set(`${fromKey}->${toKey}`, { line, mat, cone, count: 0, to: toKey });
   }
 
   /** A link's two ends, on the spheres' surfaces rather than at their centres. */
@@ -402,7 +462,24 @@ export class NetworkScene {
       }
     }
     for (const l of this.links.values()) {
-      l.mat.opacity = 0.3 + Math.min(0.6, Math.log2(1 + l.count) * 0.12);
+      // The trail the link serves: its target place's ground as the run's
+      // ground events wrote it, aged live by the network file's evaporate
+      // (announced by the manifest). A place marked dead, or evaporated to
+      // 0, takes its trail dark; the rest glow with how much is there.
+      const g = this.ground.get(l.to);
+      const aged = g ? g.v * Math.exp((-this.evaporate * (this.playhead - g.at)) / 1000) : 0;
+      if (g && aged <= 0) {
+        l.mat.opacity = 0.1;
+        l.mat.color.copy(this.linkBase).lerp(this.trailDark, 0.85);
+        (l.cone.material as THREE.MeshBasicMaterial).color.copy(l.mat.color);
+        (l.cone.material as THREE.MeshBasicMaterial).opacity = 0.25;
+      } else {
+        const k = Math.max(0, Math.min(1, aged / TRAIL_FULL));
+        l.mat.opacity = 0.3 + Math.min(0.6, Math.log2(1 + l.count) * 0.12) + k * 0.3;
+        l.mat.color.copy(this.linkBase).lerp(this.trailGlow, k);
+        (l.cone.material as THREE.MeshBasicMaterial).color.copy(l.mat.color);
+        (l.cone.material as THREE.MeshBasicMaterial).opacity = 0.6;
+      }
     }
     const fk = Math.max(0, 1 - (now - this.failAt) / 1200);
     this.renderer.setClearColor(this.background.clone().lerp(new THREE.Color("#5a1020"), fk * 0.6));
@@ -412,14 +489,15 @@ export class NetworkScene {
   }
 
   private background = new THREE.Color();
+  /** A link's resting colour, and the colours a trail's glow tends to. */
+  private linkBase = new THREE.Color("#9aa7b8");
+  private trailGlow = new THREE.Color(TRAIL_GLOW);
+  private trailDark = new THREE.Color(TRAIL_DARK);
 
   private applyTheme(): void {
     const css = getComputedStyle(document.documentElement);
     this.background.set(css.getPropertyValue("--scene-bg").trim() || "#0d1117");
-    for (const l of this.links.values()) {
-      l.mat.color.set(this.linkColor());
-      (l.cone.material as THREE.MeshBasicMaterial).color.set(this.linkColor());
-    }
+    this.linkBase.set(this.linkColor());
   }
 
   private linkColor(): string {

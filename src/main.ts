@@ -338,6 +338,7 @@ let panelAt = 0;
 function loop(now: number) {
   player.tick(now, now - last);
   last = now;
+  scene.aging(player.time);
   if (scene.walking.size) scene.walk(player.time);
   syncTimeline();
   if (selected && now - panelAt > 250) {
@@ -356,8 +357,10 @@ interface AttachedRun {
     started: number;
     ended: boolean;
     people?: { id: string; name: string; roles: string[]; url: string }[];
-    /** Neurons the demo asks to see walking between the places its file gives them (`at`). */
+    /** Neurons the demo asks to see walking between the places their file gives them (`at`). */
     walk?: string[];
+    /** The network file's ground (SPEC 4.5), announced so the trail glow ages as the engine does. */
+    ground?: { evaporate?: number };
   };
   describe: { body: DescribeBody; isError: boolean };
 }
@@ -382,6 +385,7 @@ function attach() {
     }
     current = body.network;
     people = r.manifest.people ?? [];
+    scene.setEvaporate(r.manifest.ground?.evaporate ?? 0);
     scene.show(layout(body.network));
     scene.setWalkers(r.manifest.walk ?? []);
     renderAbout(body.network, [], body.warnings);
