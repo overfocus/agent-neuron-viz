@@ -69,6 +69,19 @@ export class Player {
     }
   }
 
+  /**
+   * Joining a live run late: everything up to the live playhead fires at
+   * once, as a seek does, instead of all its pulses in one frame.
+   */
+  catchUp(now: number): void {
+    if (!this.live) return;
+    this.time = Math.max(this.time, now - this.liveStart - LIVE_LAG);
+    while (this.cursor < this.events.length && this.events[this.cursor].t <= this.time) {
+      this.hooks.fire(this.events[this.cursor], true);
+      this.cursor++;
+    }
+  }
+
   endLive(): void {
     this.live = false;
   }

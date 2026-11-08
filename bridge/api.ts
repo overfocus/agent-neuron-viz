@@ -6,9 +6,17 @@
 //   GET  /api/describe?file=…          describe_network
 //   POST /api/run {file, inputs}       start_run (keep_trace), answers {job_id}
 //   GET  /api/jobs/:id/stream          SSE: `state` while it runs, then `done` with the trace's events
+//   GET  /api/attach                   SSE: follow the runs a demo harness announces (runs/current.json)
 //
 // Every file is named relative to the agent-neuron checkout (the server's
-// working directory) and must stay inside it.
+// working directory) and must stay inside it, or inside the demos checkout.
+//
+// Attach: runs with `human` neurons are refused on the engine's MCP surface
+// (the desk is the person's, not MCP's), so the demos start them on the
+// command line with --stream and announce each in a manifest. The bridge
+// still learns the network's shape from describe_network and the final record
+// from read_trace; between the two it reads the run's own stream file, which
+// SPEC 9.1 makes the trace event for event.
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
@@ -21,6 +29,8 @@ export interface BridgeOptions {
   engine: string;
   /** Directories under root listed by /api/networks. */
   examples?: string[];
+  /** The agent-neuron-demos checkout: its runs/current.json is what /api/attach follows. */
+  demos?: string;
 }
 
 type Next = (err?: unknown) => void;
@@ -28,6 +38,8 @@ type Next = (err?: unknown) => void;
 export function createBridge(opts: BridgeOptions) {
   const root = path.resolve(opts.root);
   const examples = opts.examples ?? ["spec/examples"];
+  const demos = opts.demos ? path.resolve(opts.demos) : undefined;
+  const under = (abs: string, dir: string) => abs === dir || abs.startsWith(dir + path.sep);
   let client: Promise<McpClient> | undefined;
 
   function mcp(): Promise<McpClient> {
@@ -83,6 +95,74 @@ export function createBridge(opts: BridgeOptions) {
     const timeout = typeof body.timeout_ms === "number" ? body.timeout_ms : 60000;
     const c = await mcp();
     return c.callTool("start_run", { file, inputs, keep_trace: true, timeout_ms: timeout });
+  }
+
+  /** A file a manifest names: absolute, inside the demos checkout. */
+  function demoFile(file: unknown): string {
+    if (!demos || typeof file !== "string" || !path.isAbsolute(file) || !under(path.resolve(file), demos)) {
+      throw new HttpError(400, "the manifest names a file outside the demos checkout");
+    }
+    return path.resolve(file);
+  }
+
+  interface Manifest {
+    demo: string;
+    title?: string;
+    network: string;
+    stream: string;
+    trace: string;
+    started: number;
+    ended: boolean;
+    code?: number;
+    people?: { id: string; name: string; roles: string[]; url: string }[];
+  }
+
+  async function attach(req: IncomingMessage, res: ServerResponse) {
+    if (!demos) throw new HttpError(404, "no demos checkout is configured");
+    const manifestPath = path.join(demos, "runs", "current.json");
+    res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
+    const send = (event: string, data: unknown) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    let closed = false;
+    req.on("close", () => (closed = true));
+    let started = -1;
+    let pos = 0;
+    let buf = "";
+    let finished = false;
+    send("waiting", { manifest: manifestPath });
+    while (!closed) {
+      try {
+        const m = JSON.parse(await readFile(manifestPath, "utf8")) as Manifest;
+        if (m.started !== started) {
+          started = m.started;
+          pos = 0;
+          buf = "";
+          finished = false;
+          const c = await mcp();
+          const described = await c.callTool("describe_network", { file: demoFile(m.network) });
+          send("run", { manifest: m, describe: described });
+        }
+        const streamFile = demoFile(m.stream);
+        const text = await readFile(streamFile).catch(() => Buffer.alloc(0));
+        if (text.length > pos) {
+          buf += text.subarray(pos).toString("utf8");
+          pos = text.length;
+          const lines = buf.split("\n");
+          buf = lines.pop() ?? "";
+          const events = lines.filter((l) => l.trim()).map((l) => JSON.parse(l));
+          if (events.length) send("events", { events });
+        }
+        if (m.ended && !finished) {
+          finished = true;
+          const c = await mcp();
+          const t = await c.callTool<{ events?: unknown[] }>("read_trace", { path: demoFile(m.trace) });
+          send("done", { code: m.code, trace_events: t.isError ? undefined : t.body.events });
+        }
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== "ENOENT") send("problem", { message: (e as Error).message });
+      }
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    res.end();
   }
 
   async function stream(jobId: string, req: IncomingMessage, res: ServerResponse) {
@@ -163,6 +243,7 @@ export function createBridge(opts: BridgeOptions) {
       const r = await run(await readBody(req));
       return json(res, 200, r), true;
     }
+    if (req.method === "GET" && url.pathname === "/api/attach") return await attach(req, res), true;
     const m = url.pathname.match(/^\/api\/jobs\/([A-Za-z0-9_-]+)\/stream$/);
     if (req.method === "GET" && m) return await stream(m[1], req, res), true;
     return json(res, 404, { error: "no such endpoint" }), true;

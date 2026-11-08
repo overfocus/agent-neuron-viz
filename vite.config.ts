@@ -6,9 +6,11 @@ import { createBridge } from "./bridge/api.ts";
 // AGENT_NEURON_ROOT / NEURON_ENGINE.
 const root = path.resolve(process.env.AGENT_NEURON_ROOT ?? "../agent-neuron");
 const engine = process.env.NEURON_ENGINE ?? path.join(root, "rust-engine/target/debug/neuron-engine");
+// The demos checkout whose runs/current.json `?attach` follows.
+const demos = path.resolve(process.env.AGENT_NEURON_DEMOS ?? "../agent-neuron-demos");
 
 function mcpBridge(): Plugin {
-  const bridge = createBridge({ root, engine });
+  const bridge = createBridge({ root, engine, demos });
   return {
     name: "agent-neuron-mcp-bridge",
     configureServer(server) {

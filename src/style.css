@@ -155,3 +155,10 @@ dl.stats dd { margin: 0; font-variant-numeric: tabular-nums; }
   #log { max-height: 240px; }
   #controls select { max-width: 60vw; }
 }
+
+.label.waiting { color: #e05fa8; font-weight: 600; }
+.people { list-style: none; margin: 0 0 8px; padding: 0; }
+.people li { margin: 2px 0; color: var(--muted); }
+.people a { color: var(--accent); margin-right: 6px; }
+
+[hidden] { display: none !important; }
