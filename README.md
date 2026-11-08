@@ -21,12 +21,12 @@ engine:
 | `GET /api/jobs/:id/stream` (SSE) | `resources/subscribe run://{id}`, then `resources/read` on each `notifications/resources/updated`; at the end `read_trace` on the kept trace |
 
 `describe_network` is the sixth MCP tool, added to the Rust engine for this
-project (agent-neuron branch `feat/describe-network`).
+project.
 
 ## Run it
 
 ```sh
-# 1. Build the engine (agent-neuron checked out next to this repo, on a branch with describe_network)
+# 1. Build the engine (agent-neuron checked out next to this repo)
 (cd ../agent-neuron/rust-engine && cargo build)
 
 # 2. Start the page
