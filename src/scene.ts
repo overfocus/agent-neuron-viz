@@ -32,6 +32,8 @@ export const EVENT_COLORS: Record<string, string> = {
 const PULSE_MS = 520;
 const FLASH_MS = 700;
 const MAX_PULSES = 400;
+/** A walker's drawn size against an ordinary neuron's: many small things moving. */
+const WALKER_SIZE = 0.32;
 
 export interface NeuronStats {
   sent: number;
@@ -51,6 +53,8 @@ interface NodeView {
   flashAt: number;
   stats: NeuronStats;
   label: HTMLElement;
+  /** Drawn size against the layout's radius: walkers are small. */
+  size: number;
 }
 
 interface LinkView {
@@ -198,8 +202,8 @@ export class NetworkScene {
           if (target) target.stats.received++;
           const link = this.links.get(`${ev.from}->${to}`);
           if (link) link.count++;
-          // A walker's own trip is the signal: no pulse from where it no longer is.
-          if (!instant && from && target && !this.walkers.has(ev.from!)) this.pulse(from, target, color, false);
+          // A walker's trip is its signal: no pulses to or from a neuron that walks.
+          if (!instant && from && target && !this.walkers.has(ev.from!) && !this.walkers.has(to)) this.pulse(from, target, color, false);
         }
         if (!instant && from) this.flash(from, color, now);
         break;
@@ -211,7 +215,7 @@ export class NetworkScene {
           if (ev.type === "answer") {
             for (const to of ev.to ?? []) {
               const target = this.nodes.get(to);
-              if (target && !this.walkers.has(to)) this.pulse(from, target, color, true);
+              if (target && !this.walkers.has(to) && !this.walkers.has(ev.from!)) this.pulse(from, target, color, true);
             }
           }
         }
@@ -270,6 +274,7 @@ export class NetworkScene {
       flashAt: -Infinity,
       stats: emptyStats(),
       label: el,
+      size: 1,
     });
   }
 
@@ -279,7 +284,10 @@ export class NetworkScene {
    */
   setWalkers(ids: Iterable<string>): void {
     this.walkers = new Set([...ids].filter((id) => this.nodes.has(id)));
-    for (const [key, n] of this.nodes) n.label.classList.toggle("walker", this.walkers.has(key));
+    for (const [key, n] of this.nodes) {
+      n.label.classList.toggle("walker", this.walkers.has(key));
+      n.size = this.walkers.has(key) ? WALKER_SIZE : 1;
+    }
   }
 
   get walking(): ReadonlySet<string> {
@@ -301,7 +309,7 @@ export class NetworkScene {
       if (s && target) {
         // Stop at the target's surface, not inside it.
         const to = target.mesh.position.clone();
-        to.addScaledVector(home.clone().sub(to).normalize(), target.placed.radius + n.placed.radius * 0.6);
+        to.addScaledVector(home.clone().sub(to).normalize(), target.placed.radius + n.placed.radius * n.size);
         n.mesh.position.lerpVectors(home, to, s.k);
       } else {
         n.mesh.position.copy(home);
@@ -381,7 +389,7 @@ export class NetworkScene {
       const activity = Math.min(0.35, Math.log2(1 + n.stats.received + n.stats.answers) * 0.04);
       n.mat.emissive.copy(n.base).lerp(n.flashColor, k);
       n.mat.emissiveIntensity = 0.08 + activity + k * 1.4;
-      if (n.placed.neuron.kind !== "composed") n.mesh.scale.setScalar(1 + k * 0.25);
+      if (n.placed.neuron.kind !== "composed") n.mesh.scale.setScalar(n.size * (1 + k * 0.25));
       if (n.placed.neuron.kind === "human") {
         // A person owes an answer: the neuron breathes until it comes.
         const w = this.waiting(n.placed.key);
