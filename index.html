@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neuron Space</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+<header>
+  <h1>Neuron Space</h1>
+  <form id="controls">
+    <label>Network <select id="network"></select></label>
+    <label>Inputs <select id="inputs"></select></label>
+    <button id="run" type="submit" disabled>Run</button>
+    <span id="state" role="status">Connecting to the engine…</span>
+  </form>
+</header>
+<main>
+  <section id="stage" aria-label="The network in 3D. Drag to orbit, scroll to zoom, click a neuron for its details. The log lists the same events as text."></section>
+  <aside id="panel">
+    <section id="about" aria-label="Network"></section>
+    <section id="selected" aria-label="Selected neuron" hidden></section>
+    <section class="logbox" aria-label="Log">
+      <h2>Log <span id="count"></span></h2>
+      <ol id="log" role="log" aria-live="polite"></ol>
+    </section>
+  </aside>
+</main>
+<footer id="timeline">
+  <button id="play" type="button" disabled aria-label="Play">▶</button>
+  <input id="scrub" type="range" min="0" max="0" value="0" step="1" disabled aria-label="Playhead (ms)">
+  <output id="clock">0 ms</output>
+  <label>Speed
+    <select id="speed">
+      <option value="0.25">¼×</option>
+      <option value="0.5">½×</option>
+      <option value="1" selected>1×</option>
+      <option value="2">2×</option>
+      <option value="4">4×</option>
+    </select>
+  </label>
+  <ul id="legend" aria-label="Legend"></ul>
+</footer>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
