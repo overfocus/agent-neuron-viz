@@ -1,49 +1,16 @@
+/* kevinferron.com's face for the page: black, one neon green accent, a cyan beat. Dark is the brand — there is no light mode. */
+@font-face { font-family: "Josefin Sans"; src: url("/fonts/JosefinSans-wght.ttf") format("truetype"); font-weight: 100 700; font-display: swap; }
+@font-face { font-family: "Pixelify Sans"; src: url("/fonts/PixelifySans-wght.ttf") format("truetype"); font-weight: 400 700; font-display: swap; }
+
 :root {
-  --bg: #f6f7f9;
-  --surface: #ffffff;
-  --text: #1b1f24;
-  --muted: #5b6470;
-  --border: #d9dde3;
-  --accent: #3b6fe0;
-  --error: #c62839;
-  --warn: #a35a00;
-  --scene-bg: #e9edf2;
-  --link: #6b7685;
-  --label: #1b1f24;
-  --label-bg: rgb(255 255 255 / 0.78);
-  color-scheme: light;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0b0e13;
-    --surface: #131820;
-    --text: #e6e9ee;
-    --muted: #9aa4b2;
-    --border: #262e3a;
-    --accent: #7aa2ff;
-    --error: #ff6b78;
-    --warn: #f0b153;
-    --scene-bg: #0d1117;
-    --link: #9aa7b8;
-    --label: #e6e9ee;
-    --label-bg: rgb(13 17 23 / 0.7);
-    color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #0b0e13;
-  --surface: #131820;
-  --text: #e6e9ee;
-  --muted: #9aa4b2;
-  --border: #262e3a;
-  --accent: #7aa2ff;
-  --error: #ff6b78;
-  --warn: #f0b153;
-  --scene-bg: #0d1117;
-  --link: #9aa7b8;
-  --label: #e6e9ee;
-  --label-bg: rgb(13 17 23 / 0.7);
   color-scheme: dark;
+  --bg: #0a0a0a; --surface: #111111; --soft: #1b1b1b; --text: #f2f2f2; --muted: #a8a8b0;
+  --border: rgba(255, 255, 255, 0.15);
+  --accent: #39ff00; --cyan: #22d3ee; --warn: #ffc14d; --error: #ff7a7a;
+  --scene-bg: #0a0a0a; --link: #a8a8b0; --label: #f2f2f2; --label-bg: rgba(10, 10, 10, 0.8);
+  --pixel: "Pixelify Sans", ui-monospace, monospace;
+  --body: "Josefin Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 * { box-sizing: border-box; }
@@ -52,39 +19,58 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 15px/1.45 var(--body);
   display: grid;
   grid-template-rows: auto 1fr auto;
   overflow-x: hidden;
 }
-h1 { font-size: 16px; margin: 0; letter-spacing: 0.01em; }
-h2 { font-size: 13px; margin: 0 0 6px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
-button, select, input { font: inherit; color: inherit; }
-select, button {
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+a { color: var(--accent); }
+
+/* Header: the mark, "by" the glowing kevinferron.com, and the network picker. */
+header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 24px;
+  padding: 10px 16px 12px;
+  border-bottom: 1px solid var(--border);
   background: var(--surface);
+}
+.brand { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+h1.mark {
+  font-family: var(--pixel);
+  font-weight: 600;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  margin: 0;
+}
+h1.mark span { color: var(--accent); text-shadow: 0 0 6px rgba(57, 255, 0, 0.45); }
+.brand .by { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); letter-spacing: 0.02em; }
+.brand .by svg { width: 138px; height: auto; overflow: visible; display: block; }
+h2 { font-family: var(--pixel); font-weight: 500; font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em; margin: 0 0 6px; color: var(--accent); }
+
+#controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0; margin-left: auto; }
+#controls label { display: flex; align-items: center; gap: 6px; color: var(--muted); min-width: 0; }
+#state { color: var(--muted); }
+#state.error { color: var(--error); }
+
+select, button {
+  font: inherit;
+  color: var(--text);
+  background: var(--soft);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 4px 8px;
   max-width: 100%;
 }
+select:hover { border-color: var(--muted); }
 button { cursor: pointer; }
-button[type="submit"] { background: var(--accent); color: #fff; border-color: transparent; font-weight: 600; padding: 4px 14px; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button[type="submit"] { background: var(--accent); color: #000; border-color: transparent; font-weight: 700; padding: 4px 14px; }
+button[type="submit"]:hover:not(:disabled) { filter: brightness(1.1); }
 button:disabled { opacity: 0.5; cursor: default; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 20px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
-}
-#controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0; }
-#controls label { display: flex; align-items: center; gap: 6px; color: var(--muted); min-width: 0; }
-#state { color: var(--muted); }
-#state.error { color: var(--error); }
 
 main { display: grid; grid-template-columns: 1fr 340px; min-height: 0; }
 #stage { position: relative; min-height: 0; overflow: hidden; background: var(--scene-bg); }
@@ -100,6 +86,7 @@ main { display: grid; grid-template-columns: 1fr 340px; min-height: 0; }
 }
 .label.inner { font-size: 10px; opacity: 0.8; }
 .label.composed { font-weight: 600; }
+.label.waiting { color: #f472b6; font-weight: 700; }
 
 #panel {
   border-left: 1px solid var(--border);
@@ -126,7 +113,7 @@ dl.stats dd { margin: 0; font-variant-numeric: tabular-nums; }
   margin: 0;
   padding: 0;
   overflow-y: auto;
-  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 12px/1.5 var(--mono);
   min-height: 0;
   flex: 1;
 }
@@ -145,7 +132,13 @@ dl.stats dd { margin: 0; font-variant-numeric: tabular-nums; }
 #scrub { flex: 1 1 200px; min-width: 120px; accent-color: var(--accent); }
 #clock { font-variant-numeric: tabular-nums; min-width: 9ch; color: var(--muted); }
 #timeline label { display: flex; align-items: center; gap: 6px; color: var(--muted); }
-#legend { display: flex; flex-wrap: wrap; gap: 4px 12px; list-style: none; margin: 0; padding: 0; color: var(--muted); font-size: 12px; }
+#legend { display: flex; flex-wrap: wrap; gap: 4px 12px; list-style: none; margin: 0; padding: 0; color: var(--muted); font-size: 13px; }
+
+.people { list-style: none; margin: 0 0 8px; padding: 0; }
+.people li { margin: 2px 0; color: var(--muted); }
+.people a { color: var(--accent); margin-right: 6px; }
+
+[hidden] { display: none !important; }
 
 @media (max-width: 800px) {
   body { grid-template-rows: auto auto auto; height: auto; }
@@ -154,11 +147,5 @@ dl.stats dd { margin: 0; font-variant-numeric: tabular-nums; }
   #panel { border-left: 0; border-top: 1px solid var(--border); }
   #log { max-height: 240px; }
   #controls select { max-width: 60vw; }
+  .brand .by svg { width: 120px; }
 }
-
-.label.waiting { color: #e05fa8; font-weight: 600; }
-.people { list-style: none; margin: 0 0 8px; padding: 0; }
-.people li { margin: 2px 0; color: var(--muted); }
-.people a { color: var(--accent); margin-right: 6px; }
-
-[hidden] { display: none !important; }

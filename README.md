@@ -1,5 +1,7 @@
 # agent-neuron-viz
 
+<img src="assets/brand/icon-256.png" width="92" align="right" alt="agent-neuron-viz's mark: a neon-green neuron inside a cyan orbit ring, on black">
+
 Neuron Space: a 3D view of [agent-neuron](../agent-neuron) networks, driven
 by the Rust engine over MCP. Pick a network file and it is drawn in 3D before
 any traffic. Run it and the events play across the links as they happen, then

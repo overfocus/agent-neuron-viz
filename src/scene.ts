@@ -7,22 +7,26 @@ import { CSS2DObject, CSS2DRenderer } from "three/addons/renderers/CSS2DRenderer
 import type { Layout, PlacedNeuron } from "./layout.ts";
 import type { TraceEvent } from "./types.ts";
 
+// Kind colours, the family's (rigswig's page uses the same hues): bright on black,
+// and never the only cue — the legend names every colour, and this map is the one
+// place they live. The family accent (green) is where signals enter; people are pink.
 export const KIND_COLORS: Record<string, string> = {
-  source: "#3fb37f",
-  run: "#4c8dff",
-  serve: "#2bb6c4",
-  http: "#f08c3a",
-  human: "#e05fa8",
-  composed: "#9b7bff",
+  source: "#39ff00",
+  run: "#ff9f43",
+  serve: "#22d3ee",
+  http: "#facc15",
+  human: "#f472b6",
+  composed: "#a78bfa",
 };
-const EVENT_COLORS: Record<string, string> = {
-  signal: "#8fd3ff",
-  answer: "#ffd35a",
-  quiet: "#8a8f98",
-  drop: "#ff9b42",
-  error: "#ff4d5e",
-  unknown: "#ff4d5e",
-  fail: "#ff4d5e",
+const UNKNOWN_KIND = "#b4b4bc";
+export const EVENT_COLORS: Record<string, string> = {
+  signal: "#22d3ee",
+  answer: "#39ff00",
+  quiet: "#b4b4bc",
+  drop: "#ffc14d",
+  error: "#ff7a7a",
+  unknown: "#ff7a7a",
+  fail: "#ff7a7a",
 };
 const PULSE_MS = 520;
 const FLASH_MS = 700;
@@ -218,7 +222,7 @@ export class NetworkScene {
   }
 
   private addNeuron(p: PlacedNeuron): void {
-    const kindColor = new THREE.Color(KIND_COLORS[p.neuron.kind] ?? "#9aa3ad");
+    const kindColor = new THREE.Color(KIND_COLORS[p.neuron.kind] ?? UNKNOWN_KIND);
     const composed = p.neuron.kind === "composed";
     const inner = p.level > 0;
     const mat = new THREE.MeshStandardMaterial({

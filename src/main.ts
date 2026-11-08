@@ -1,7 +1,7 @@
 import "./style.css";
 import { layout } from "./layout.ts";
 import { Player } from "./player.ts";
-import { KIND_COLORS, NetworkScene } from "./scene.ts";
+import { EVENT_COLORS, KIND_COLORS, NetworkScene } from "./scene.ts";
 import type { DescribeBody, Diagnostic, JobState, NetworkDesc, TraceEvent } from "./types.ts";
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
@@ -280,10 +280,9 @@ function logEvent(ev: TraceEvent) {
 function renderLegend() {
   const items: [string, string][] = [
     ...Object.entries(KIND_COLORS).map(([k, c]) => [k, c] as [string, string]),
-    ["signal", "#8fd3ff"],
-    ["answer ⌒", "#ffd35a"],
-    ["drop", "#ff9b42"],
-    ["error", "#ff4d5e"],
+    ...Object.entries(EVENT_COLORS)
+      .filter(([, c], i, all) => all.slice(0, i).every(([, c2]) => c2 !== c))
+      .map(([k, c]) => [k, c] as [string, string]),
   ];
   $("#legend").replaceChildren(
     ...items.map(([name, color]) => {
