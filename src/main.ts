@@ -3,6 +3,7 @@ import { layout } from "./layout.ts";
 import { Player } from "./player.ts";
 import { EVENT_COLORS, KIND_COLORS, NetworkScene } from "./scene.ts";
 import type { DescribeBody, Diagnostic, JobState, NetworkDesc, TraceEvent } from "./types.ts";
+import { trips } from "./walk.ts";
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
 const networkSel = $<HTMLSelectElement>("#network");
@@ -337,6 +338,7 @@ let panelAt = 0;
 function loop(now: number) {
   player.tick(now, now - last);
   last = now;
+  if (scene.walking.size) scene.walk(player.time);
   syncTimeline();
   if (selected && now - panelAt > 250) {
     renderSelected();
@@ -348,7 +350,15 @@ function loop(now: number) {
 // -- Attach: follow the runs a demo harness announces --------------------------
 
 interface AttachedRun {
-  manifest: { demo: string; title?: string; started: number; ended: boolean; people?: { id: string; name: string; roles: string[]; url: string }[] };
+  manifest: {
+    demo: string;
+    title?: string;
+    started: number;
+    ended: boolean;
+    people?: { id: string; name: string; roles: string[]; url: string }[];
+    /** Neurons the demo asks to see walking between the places its file gives them (`at`). */
+    walk?: string[];
+  };
   describe: { body: DescribeBody; isError: boolean };
 }
 
@@ -373,6 +383,7 @@ function attach() {
     current = body.network;
     people = r.manifest.people ?? [];
     scene.show(layout(body.network));
+    scene.setWalkers(r.manifest.walk ?? []);
     renderAbout(body.network, [], body.warnings);
     renderPeople(people);
     events = [];
@@ -384,6 +395,7 @@ function attach() {
   src.addEventListener("events", (m) => {
     const { events: more } = JSON.parse((m as MessageEvent).data) as { events: TraceEvent[] };
     events = events.concat(more);
+    if (scene.walking.size) scene.setTrips(trips(events, scene.walking));
     player.update(events);
     player.catchUp(performance.now());
     status(`${current?.name ?? "run"}: ${events.length} events${people?.length ? " · the desk is open" : ""}`);
@@ -391,6 +403,7 @@ function attach() {
   src.addEventListener("done", (m) => {
     const d = JSON.parse((m as MessageEvent).data) as { code?: number; trace_events?: TraceEvent[] };
     const all = d.trace_events ?? events;
+    if (scene.walking.size) scene.setTrips(trips(all, scene.walking));
     player.update(all, true);
     player.endLive();
     player.playing = player.time < player.duration;

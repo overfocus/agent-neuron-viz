@@ -7,6 +7,8 @@ export interface NeuronDesc {
   description: string;
   options?: { threshold?: number; within?: number; maxHops?: number };
   cost?: Record<string, number>;
+  /** Where a drawing puts the neuron (SPEC 2.2, decision 0011): a descriptive field. */
+  at?: [number, number, number];
   /** Declared `effect` (SPEC 11): a started call is never cut, a crash is `unknown`. */
   effect?: boolean;
   /** A composed neuron's inner network, or a loop mark. */
@@ -54,6 +56,8 @@ export interface TraceEvent {
   what?: string;
   status?: string;
   hops?: number;
+  replyTo?: string;
+  cause?: string;
   payload?: { type: "json"; data?: unknown; preview?: string; truncated?: boolean } | { type: "text"; text: string; truncated?: boolean };
   truncated?: number;
 }

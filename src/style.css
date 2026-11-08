@@ -149,3 +149,7 @@ dl.stats dd { margin: 0; font-variant-numeric: tabular-nums; }
   #controls select { max-width: 60vw; }
   .brand .by svg { width: 120px; }
 }
+
+/* Walkers (the colony's ants) are many and moving: their names show only when selected. */
+.label.walker { display: none; }
+.label.walker.chosen { display: block; }
