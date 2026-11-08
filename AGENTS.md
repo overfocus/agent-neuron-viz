@@ -5,8 +5,8 @@ talks to the Rust engine only through MCP (`neuron-engine mcp`), through the
 bridge in `bridge/`. See README.md for the architecture.
 
 - Run `npm run check` before you finish. The bridge test needs
-  `../agent-neuron/rust-engine/target/debug/neuron-engine`, built from a branch
-  that has `describe_network`.
+  `../agent-neuron/rust-engine/target/debug/neuron-engine`, built from
+  agent-neuron main.
 - Everything about a network comes from the engine. Don't parse network files
   in the bridge or the page; if the page needs something MCP doesn't give, add
   it to the engine's MCP surface in agent-neuron (with its tests and README M3
