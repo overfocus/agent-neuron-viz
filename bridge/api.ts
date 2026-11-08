@@ -18,6 +18,7 @@
 // from read_trace; between the two it reads the run's own stream file, which
 // SPEC 9.1 makes the trace event for event.
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { statSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { McpClient, type Notification } from "./mcp-client.ts";
@@ -42,14 +43,42 @@ export function createBridge(opts: BridgeOptions) {
   const under = (abs: string, dir: string) => abs === dir || abs.startsWith(dir + path.sep);
   let client: Promise<McpClient> | undefined;
 
+  // The engine binary's mtime when the running child was started. A rebuilt
+  // engine (a new field, a fix) would otherwise be shadowed by the child that
+  // started from the old binary for as long as this server lives; so a child
+  // whose binary has changed is replaced at its next use, unless a run it
+  // started is still being streamed.
+  let startedFrom = 0;
+  let streaming = 0;
+  const builtAt = () => {
+    try {
+      return statSync(opts.engine).mtimeMs;
+    } catch {
+      return 0;
+    }
+  };
+
   function mcp(): Promise<McpClient> {
+    if (client && streaming === 0 && builtAt() !== startedFrom) {
+      const old = client;
+      client = undefined;
+      void old.then((c) => c.close()).catch(() => {});
+      process.stderr.write("[bridge] the engine binary changed: starting a fresh neuron-engine mcp\n");
+    }
     if (!client) {
-      client = McpClient.start({ command: opts.engine, cwd: root }).then((c) => {
+      startedFrom = builtAt();
+      const starting: Promise<McpClient> = McpClient.start({ command: opts.engine, cwd: root }).then((c) => {
         c.on("log", (l: string) => process.stderr.write(`[neuron-engine] ${l}`));
-        c.on("exit", () => (client = undefined));
+        // Only this child's own exit forgets it: a replaced one exits late.
+        c.on("exit", () => {
+          if (client === starting) client = undefined;
+        });
         return c;
       });
-      client.catch(() => (client = undefined));
+      starting.catch(() => {
+        if (client === starting) client = undefined;
+      });
+      client = starting;
     }
     return client;
   }
@@ -173,10 +202,12 @@ export function createBridge(opts: BridgeOptions) {
     let ended = false;
     let reading = false;
     let dirty = false;
+    streaming++;
 
     const finish = () => {
       if (ended) return;
       ended = true;
+      streaming--;
       c.off("notification", onNote);
       c.request("resources/unsubscribe", { uri }).catch(() => {});
       res.end();

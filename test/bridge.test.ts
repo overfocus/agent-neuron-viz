@@ -89,3 +89,43 @@ describe.skipIf(!ready)("the MCP bridge", () => {
     expect([...sizes].sort((a, b) => a - b)).toEqual(sizes);
   }, 30000);
 });
+
+describe.skipIf(!ready)("a rebuilt engine", () => {
+  it("is picked up at the next call: the bridge replaces a child whose binary changed", async () => {
+    const { mkdtempSync, copyFileSync, utimesSync, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const dir = mkdtempSync(path.join(tmpdir(), "viz-rebuilt-"));
+    const copy = path.join(dir, "neuron-engine");
+    copyFileSync(engine, copy);
+    const b = createBridge({ root, engine: copy });
+    const srv = createServer((req, res) => b.middleware(req, res, () => res.writeHead(404).end()));
+    await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
+    const port = (srv.address() as { port: number }).port;
+    const describe = () => fetch(`http://127.0.0.1:${port}/api/describe?file=spec/examples/alerts.network.json`).then((r) => r.json());
+    const pids = async () => {
+      const { execFileSync } = await import("node:child_process");
+      try {
+        return execFileSync("pgrep", ["-f", copy], { encoding: "utf8" }).trim().split("\n").filter(Boolean);
+      } catch {
+        return [];
+      }
+    };
+    try {
+      expect((await describe()).isError).toBe(false);
+      const first = await pids();
+      expect(first.length).toBe(1);
+      // "Rebuild" the engine: a new mtime on the binary.
+      const later = new Date(Date.now() + 5000);
+      utimesSync(copy, later, later);
+      expect((await describe()).isError).toBe(false);
+      await new Promise((r) => setTimeout(r, 300));
+      const second = await pids();
+      expect(second.length).toBe(1);
+      expect(second[0]).not.toBe(first[0]);
+    } finally {
+      await b.close();
+      await new Promise((r) => srv.close(r));
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30000);
+});
