@@ -41,6 +41,11 @@ npm run dev            # http://localhost:5180
 `AGENT_NEURON_DEMOS` (default `../agent-neuron-demos`) is the checkout attach follows;
 `NEURON_ENGINE` overrides the binary. `PORT` sets the dev port.
 
+`ENGINE` names the agent-neuron commit this repo's `npm run check` last passed
+on. It is a record, not a requirement: the viewer runs on whatever the checkout
+builds. `npm run pin` builds the engine, runs the check and records the commit
+when it passes.
+
 ## What you see
 
 - **Neurons** are spheres coloured by kind (source, run, serve, http, human).
